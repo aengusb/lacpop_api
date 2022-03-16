@@ -1,0 +1,567 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Objectifs d'apprentissage
+
+- Commencer à se familiariser avec R
+- Comprendre les bases d'une API et pourquoi vous devriez les utiliser.
+- Être capable d'utiliser la fonction GET et de travailler avec des fichiers .json.
+
+Et si nous avons le temps...
+
+- Comprendre les bases de bases de données (notamment SQL)
+
+```{r}
+
+#install.packages("jsonlite")
+#install.packages("httr")
+#install.packages("RSQLite")
+#install.packages("tidyverse")
+#install.packages("data.table")
+#install.packages("ellipsis")
+
+library(jsonlite)
+library(tidyverse)
+library(httr)
+library(data.table)
+
+```
+
+# Commencer avec R
+
+```{r}
+
+5 + 5
+
+# objet
+x <- 1 + 5
+
+x
+
+# des commandes
+y <- sqrt(49)
+
+y
+
+x*y
+
+```
+
+```{r}
+
+# vecteur
+lettres <- c('a','b','c')
+
+paste0(lettres,1)
+
+paste0(lettres, c(1,2,3))
+
+LETTERS[1:10]
+
+```
+
+# Les commandes
+```{r}
+
+?sum
+
+sum(1,2,3)
+
+sum(x,y)
+
+x %>%
+  sum()
+
+x %>%
+  sum(y)
+
+x %>%
+  sum(., y)
+
+"Bonjour" %>%
+  paste0("à tous")
+
+```
+
+```{r}
+
+c(1:10) %>%
+  sample(., 5)
+
+```
+
+```{r}
+
+resultats_possibles = c(1:1000)
+nombre_echantillons = 10
+
+sample(resultats_possibles, nombre_echantillons)
+
+echantillons <- data.frame(echantillon = seq(1,nombre_echantillons),
+           resultat = sample(resultats_possibles, nombre_echantillons))
+
+echantillons
+
+```
+
+```{r}
+
+write.csv(echantillons, "echantillons.csv")
+
+toJSON(x = echantillons, dataframe = 'rows')
+
+toJSON(x = echantillons, dataframe = 'rows', pretty = T)
+
+toJSON(x = echantillons, dataframe = 'rows', pretty = T) %>% write(., "echantillons.json")
+
+```
+
+```{r}
+
+?rnorm
+
+rnorm(nombre_echantillons)
+
+rnorm(nombre_echantillons) %>% hist()
+
+rnorm(nombre_echantillons) %>% hist(breaks = 100)
+
+```
+
+
+# Exercice applique 1
+
+```{r}
+
+# Stockez toutes les lettres de l'alphabet au format suivant (a-1, b-2, c-3) dans un objet
+
+# Comptez le nombre de caractères dans cet objet en utilisant la fonction nchar()
+
+```
+
+# Les bases d'une API
+
+```{r}
+# https://alexwohlbruck.github.io/cat-facts/docs/
+
+httr::GET("https://www.blagues-api.fr/api/random")
+
+# Nous devons le stocker comme un objet
+faits_chat <- httr::GET("https://www.blagues-api.fr/api/random")
+
+class(faits_chat)
+summary(faits_chat)
+```
+
+
+```{r}
+
+# Voyez ce qui est stocké dans faits_chat
+faits_chat %>% 
+  httr::content("text", encoding = "UTF-8")
+
+# Deux façons de lire les données...
+dir.create("json")
+content(faits_chat, "text", encoding = "UTF-8") %>%
+  write(., "json/faits_chat.json")
+
+faits_chat %>% 
+  content("text", encoding = "UTF-8") %>%
+  jsonlite::fromJSON(flatten = FALSE)
+
+```
+
+
+```{r}
+
+faits_chat %>% 
+  content("text", encoding = "UTF-8") %>%
+  fromJSON(flatten = FALSE) %>%
+  pull(text)
+
+```
+
+# Represent
+
+- Trouvez les élus et les circonscriptions électorales pour n'importe quelle adresse ou code postal canadien, à tous les niveaux de gouvernement.
+- Maintenu par Open North
+
+```{r}
+
+# https://represent.opennorth.ca/api/
+
+rep_sets <- GET("https://represent.opennorth.ca/representative-sets") %>%
+  content("text", encoding = "UTF-8") %>% 
+  fromJSON(flatten = FALSE)
+
+summary(rep_sets)
+
+rep_sets$objects
+
+rep_sets$meta
+
+```
+
+## Exercice applique 2 - Trouvez les 20 prochains ensembles représentatifs
+
+### Pagination
+
+```{r}
+
+rep_sets_next <- GET("") %>%
+  content("text", encoding = "UTF-8") %>% 
+  fromJSON(flatten = FALSE)
+
+```
+
+### Augmenter le nombre dans une demande particulière
+
+```{r}
+
+#  Obtenez tous les représentatifs
+rep_sets_large <- GET("https://represent.opennorth.ca/representative-sets",
+    query = list(limit = 500))
+
+rep_sets_large  %>%
+  content("text", encoding = "UTF-8") %>% 
+  fromJSON(flatten = FALSE)
+# Quelle ville est 56ème?
+
+```
+
+## Pour obtenir des informations supplémentaires sur les villes du Québec
+
+```{r}
+
+villes_quebec <- rep_sets_large %>%
+  content("text", encoding = "UTF-8") %>% 
+  fromJSON(flatten = FALSE) %>%
+  .$objects %>%
+  filter(str_detect(string = name, pattern = "Conseil"))
+
+villes_quebec
+
+villes_quebec$related
+```
+
+## Pour obtenir quelques informations sur les représentants dans chaque ville
+
+# Une ville
+
+```{r}
+
+villes_quebec$name[1]
+
+villes_quebec$related$representatives_url[1]
+
+# Besoin du point d'arrivée spécifique
+api_endpoint <- paste0("https://represent.opennorth.ca/",villes_quebec$related$representatives_url[1])
+api_endpoint
+
+rep_json <- GET(api_endpoint, query = list()) %>% 
+    content("text") 
+
+write(rep_json, "json/gatineau_reps.json")
+  
+rep_dat <- rep_json %>%
+  fromJSON(flatten = FALSE) %>%
+  .$objects %>%
+  select(representative_set_name, name, district_name, photo_url, related)
+
+rep_dat
+```
+
+# Nous pouvons faire cela pour chaque ville facilement
+
+```{r}
+
+# Les listes
+
+liste <- list()
+
+liste[[1]] <- "bonjour"
+liste[[2]] <- c(1,2,3)
+liste[[3]] <- data.frame(teste = seq(1,10))
+
+liste
+```
+
+
+```{r}
+# Lists are important here...
+ville_rep_data <- list()
+
+# We can loop over the data...
+for (i in 1:2) {
+#for (i in 1:length(villes_quebec$related$representatives_url)) {
+
+  nom_ville <- villes_quebec$related$representatives_url[i] %>%
+    str_remove_all(., "representatives|/|-city-council")
+
+  api_endpoint <- paste0("https://represent.opennorth.ca/",villes_quebec$related$representatives_url[i])
+  
+  # Query that API endpoint
+  rep_json <- GET(api_endpoint, query = list()) %>% 
+    content("text") 
+  
+  # Save the output just in case
+  
+  write(rep_json, paste0("json/", nom_ville, "_reps.json"))
+  
+  rep_dat <- rep_json %>%
+    fromJSON(flatten = FALSE) %>%
+    .$objects %>%
+    select(representative_set_name, name, district_name, photo_url, related)
+  
+  # Keep the names of the city - this is good practice for list building
+    
+  ville_rep_data[[nom_ville]] <- rep_dat 
+  
+  print(paste0('Réussir à stocker informations pour ',nom_ville,'.'))
+  
+  # Make sure to not spam the API - check rate limits but also be a good citizen of the internet
+  Sys.sleep(2.5)
+  
+}
+
+summary(ville_rep_data)
+
+ville_rep_data <- bind_rows(ville_rep_data)
+
+ville_rep_data
+```
+
+
+```{r}
+# Juste pour le plaisir
+dir.create("images")
+for (i in 1:5) {
+  
+  image_url = ville_rep_data$photo_url[i]
+  
+  if (image_url != "") {
+    
+    download.file(url = image_url,
+                  destfile = paste0("images/",ville_rep_data$name[i],'.jpg'), 
+                  mode = 'wb')
+    Sys.sleep(2.5)
+    
+  }
+}
+
+```
+
+# Reddit
+
+```{r}
+# https://github.com/pushshift/api
+
+soumissions_recentes <- GET("https://api.pushshift.io/reddit/search/submission/",
+          query = list(size = 100, subreddit = 'Quebec')) %>%
+  content("text", encoding = "UTF-8") %>% 
+  fromJSON(flatten = FALSE)
+
+colnames(soumissions_recentes$data)
+soumissions_recentes$data$title[1:10]
+
+```
+
+## Get top posts 
+
+```{r}
+
+variables_interet <- c("id","subreddit","created_utc","title","author",
+                       "full_link","score","retrieved_on",
+                       "num_comments","domain","url")
+
+avant = "90d"
+apres = '97d'
+
+top_comments <- GET("https://api.pushshift.io/reddit/search/submission/",
+          query = list(before = avant, 
+                       after = apres, 
+                       size = 100,
+                       sort = 'desc',
+                       subreddit = 'Quebec',
+                       sort_type = 'num_comments',
+                       num_comments = '>20')) %>%
+        content("text", encoding = "UTF-8") %>% 
+        fromJSON(flatten = FALSE) %>%
+        .$data %>%
+    select(all_of(variables_interet))
+
+top_comments$title[1:10]
+```
+
+```{r}
+
+avant = "90d"
+apres = '97d'
+
+ps_result <- ps_default_dat <- list()
+
+for (i in 1:4) {
+  
+  # TryCatch est un outil lorsque les API tombent parfois en panne et renvoient des informations erronées. Idéalement, vous tenez compte de chaque erreur, mais ici nous adoptons une approche agnostique des erreurs.
+  
+  message <- tryCatch(
+    
+    {
+      
+      ps_result[[i]] <- GET("https://api.pushshift.io/reddit/search/submission/",
+          query = list(before = avant, 
+                       after = apres, 
+                       size = 100,
+                       sort = 'desc',
+                       subreddit = 'Quebec',
+                       sort_type = 'num_comments',
+                       num_comments = '>20')) %>%
+        content("text", encoding = "UTF-8") %>% 
+        fromJSON(flatten = FALSE) %>%
+        .$data
+
+      # Sélectionner uniquement les variables qui vous intéressent et les stocker dans une liste
+      ps_default_dat[[i]] <- select(ps_result[[i]], all_of(variables_interet))
+      
+      Sys.sleep(2.5)
+      
+      # Avance 7 jours
+      avant = paste0((i*7)+90,'d')
+      apres = paste0(((i+1)*7)+90,'d')
+
+      paste0('Réussir à stocker ', nrow(ps_default_dat[[i]]),
+             ' soumissions, avec un nombre total de commentaires de ', 
+             sum(ps_default_dat[[i]]$num_comments), ", tous avant la date de ",
+             as.POSIXct(min(ps_default_dat[[i]]$created_utc), origin="1970-01-01",tz="EST"), ".")
+      
+    },
+    error = function(cond) {
+      Sys.sleep(2.5)
+      paste0(Sys.time(), ": Iteration " , i, " A donné une erreur:", cond, ".")
+    },
+    warning = function(cond) {
+      avant = avant - 1
+      Sys.sleep(2.5)
+      paste0(Sys.time(), ": Iteration " , i, " A donné un avertissement: ", cond, ".")
+    }
+  )
+  
+  print(message)
+  
+}
+
+quebec_soumissions <- bind_rows(ps_default_dat)
+
+
+```
+
+## Et les commentaires
+
+```{r}
+
+commentaires_reddit <- list()
+
+#for (i in 1:length(quebec_soumissions$id)) {
+for (i in 1:3) {
+  
+  avant <- round(as.numeric(Sys.time()),0)
+  
+  while (avant >= quebec_soumissions$created_utc[i]) {
+    
+    # Here we specify a few parts of the query to only get specific fields
+    comments_temp <- GET("https://api.pushshift.io/reddit/search/comment/",
+                         query = list(link_id = quebec_soumissions$id[1],
+                                      before = avant,
+                                      size = 100,
+                                      fields = "id",
+                                      fields = "author",
+                                      fields = "created_utc",
+                                      fields = "parent_id",
+                                      fields = "body")) %>% 
+      content("text", encoding = "UTF-8") %>% 
+      fromJSON(flatten = FALSE) %>% 
+      .$data
+    
+    # Si nous ne recevons pas de nouvelles données, passez à la soumission suivante
+    if (length(comments_temp) == 0) break
+
+    avant = min(comments_temp$created_utc)
+    
+    if (length(commentaires_reddit) < i) {
+      commentaires_reddit[[i]] <- comments_temp
+    } else {
+      commentaires_reddit[[i]] <- rbind(commentaires_reddit[[i]], comments_temp)
+    }
+    
+    
+    paste0('Réussir à stocker ', nrow(comments_temp),
+           ' commentaires, pour un total de  ', 
+           nrow(commentaires_reddit[[i]]), ", tous avant la date de ",
+           as.POSIXct(min(avant), origin="1970-01-01",tz="EST"), ".") %>%
+      print()
+    
+    Sys.sleep(3)
+  }
+}
+
+commentaires_reddit
+```
+
+## Exercice applique 3
+
+```{r}
+
+# Modifiez le code ci-dessus pour extraire les données complètes et enregistrez le fichier .json localement au cas où vous voudriez d'autres champs plus tard...
+
+```
+
+# Open Parliament
+
+## Obtenir les détails de les Projets de loi
+
+```{r}
+# https://openparliament.ca/api/
+
+projets_loi <- GET("https://api.openparliament.ca/votes",
+             query = list(format = "json")) %>%
+  content("text", encoding = "UTF-8") %>%
+  fromJSON() %>%
+  .$objects %>%
+  jsonlite::flatten()
+
+projets_loi
+```
+
+## Obtenir les détails du vote
+
+```{r}
+
+details_vote <- list()
+
+for (i in 1:length(projets_loi$url)) {
+  
+  vote <- GET(paste0("https://api.openparliament.ca/",bills$url[i]),
+             query = list(format = "json")) %>%
+  content("text", encoding = "UTF-8") %>%
+  fromJSON(flatten= TRUE)
+  
+  details_vote[[i]] <- vote$party_votes %>%
+    add_column(yea_total = vote$yea_total) %>%
+    add_column(nay_total = vote$nay_total) %>%
+    add_column(session = vote$session) %>%
+    add_column(url = vote$url)
+  
+  print(paste0('Réussir à stocker ',vote$url,'.'))
+
+  Sys.sleep(2.5)
+  
+}
+
+details_vote_df <- bind_rows(details_vote)
+
+dim(details_vote_df); colnames(details_vote_df); head(details_vote_df)
+
+```
