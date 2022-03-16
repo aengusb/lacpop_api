@@ -55,6 +55,8 @@ x*y
 # vecteur
 lettres <- c('a','b','c')
 
+?paste
+
 paste0(lettres,1)
 
 paste0(lettres, c(1,2,3))
@@ -280,6 +282,8 @@ rep_dat
 
 # Les listes
 
+?list
+
 liste <- list()
 
 liste[[1]] <- "bonjour"
@@ -287,6 +291,7 @@ liste[[2]] <- c(1,2,3)
 liste[[3]] <- data.frame(teste = seq(1,10))
 
 liste
+
 ```
 
 
@@ -299,7 +304,7 @@ for (i in 1:2) {
 #for (i in 1:length(villes_quebec$related$representatives_url)) {
 
   nom_ville <- villes_quebec$related$representatives_url[i] %>%
-    str_remove_all(., "representatives|/|-city-council")
+    str_remove_all(., "representatives|/|conseil-municipal-de-")
 
   api_endpoint <- paste0("https://represent.opennorth.ca/",villes_quebec$related$representatives_url[i])
   
